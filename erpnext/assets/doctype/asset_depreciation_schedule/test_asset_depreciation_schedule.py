@@ -29,6 +29,7 @@ from erpnext.assets.doctype.asset_value_adjustment.test_asset_value_adjustment i
 )
 
 
+<<<<<<< HEAD
 class TestAssetDepreciationSchedule(FrappeTestCase):
 	def setUp(self):
 		create_asset_data()
@@ -63,6 +64,74 @@ class TestAssetDepreciationSchedule(FrappeTestCase):
 		self.assertEqual(cstr(schedule[10].schedule_date), "2026-11-01")
 		self.assertEqual({row.journal_entry for row in schedule if row.journal_entry}, booked_entries)
 		self.assertEqual(asset.reload().get_value_after_depreciation(), 95833.38)
+=======
+class TestAssetDepreciationSchedule(ERPNextTestSuite):
+	def test_wdv_schedule_uses_asset_company_fiscal_year(self):
+		self.addCleanup(frappe.cache.delete_value, "fiscal_years")
+
+		india_fiscal_year = frappe.get_doc(
+			{
+				"doctype": "Fiscal Year",
+				"year": "_Test Asset India FY 2032",
+				"year_start_date": "2032-04-01",
+				"year_end_date": "2033-03-31",
+				"companies": [{"company": "_Test Company"}],
+			}
+		).insert()
+		australia_fiscal_year = frappe.get_doc(
+			{
+				"doctype": "Fiscal Year",
+				"year": "_Test Asset Australia FY 2032",
+				"year_start_date": "2032-07-01",
+				"year_end_date": "2033-06-30",
+				"companies": [{"company": "_Test Company 1"}],
+			}
+		).insert()
+
+		self.assertEqual(india_fiscal_year.disabled, 0)
+		self.assertEqual(australia_fiscal_year.disabled, 0)
+
+		asset = create_asset(
+			company="_Test Company",
+			calculate_depreciation=1,
+			purchase_date="2032-11-01",
+			available_for_use_date="2032-11-01",
+			depreciation_start_date="2032-11-30",
+			depreciation_method="Written Down Value",
+			net_purchase_amount=100000,
+			rate_of_depreciation=40,
+			total_number_of_depreciations=12,
+			frequency_of_depreciation=1,
+		)
+
+		schedule = get_depr_schedule(asset.name, "Draft")
+		self.assertEqual(getdate(schedule[5].schedule_date), getdate("2033-04-30"))
+		self.assertEqual(flt(schedule[5].depreciation_amount, 2), 2777.78)
+
+	def test_complete_opening_periods(self):
+		for available in ("2026-08-01", "2024-02-01"):
+			for frequency in (1, 3, 6, 12):
+				for opening in (1, 4):
+					with self.subTest(available=available, frequency=frequency, opening=opening):
+						start = get_last_day(add_months(available, (opening + 1) * frequency - 1))
+						asset = create_asset(
+							calculate_depreciation=1,
+							available_for_use_date=available,
+							depreciation_start_date=start,
+							frequency_of_depreciation=frequency,
+							total_number_of_depreciations=12,
+							net_purchase_amount=13200,
+							expected_value_after_useful_life=1200,
+							opening_number_of_booked_depreciations=opening,
+							opening_accumulated_depreciation=1000 * opening,
+						)
+						schedule = get_depr_schedule(asset.name, "Draft")
+						self.assertEqual(
+							[row.depreciation_amount for row in schedule], [1000] * (12 - opening)
+						)
+						self.assertEqual(schedule[-1].accumulated_depreciation_amount, 12000)
+						self.assertEqual(getdate(schedule[0].schedule_date), start)
+>>>>>>> 45c714b (test(assets): cover company fiscal years in schedules)
 
 	def test_throw_error_if_another_asset_depr_schedule_exist(self):
 		asset = create_asset(item_code="Macbook Pro", calculate_depreciation=1, submit=1)
